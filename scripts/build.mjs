@@ -1,10 +1,10 @@
-// Buduje CSS (Tailwind) i aktualizuje sumy kontrolne w public/index.html.
+// Buduje CSS (Tailwind) i aktualizuje sumy kontrolne w public/index.html oraz CSP w public/_headers.
 // Użycie: npm install && npm run build
 // Uruchamiaj po każdej zmianie kodu JavaScript, klas CSS lub plików w public/vendor.
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { ROOT, INDEX, STYLE_RE, CSP_RE, VENDOR_RE, inlineHashes, buildCsp, vendorSri } from './lib.mjs';
+import { ROOT, INDEX, HEADERS, STYLE_RE, CSP_RE, HEADER_CSP_RE, VENDOR_RE, inlineHashes, buildCsp, headerCsp, vendorSri } from './lib.mjs';
 
 let html = readFileSync(INDEX, 'utf8');
 
@@ -31,5 +31,10 @@ html = html.replace(VENDOR_RE, (_, file) => `{ url: '${file}', sri: '${vendorSri
 html = html.replace(CSP_RE, (_, a, _b, c) => a + buildCsp(inlineHashes(html)) + c);
 
 writeFileSync(INDEX, html);
+
+// 4. Ta sama CSP (z frame-ancestors) jako nagłówek HTTP w public/_headers.
+const headers = readFileSync(HEADERS, 'utf8');
+if (!HEADER_CSP_RE.test(headers)) throw new Error('Brak linii Content-Security-Policy w public/_headers');
+writeFileSync(HEADERS, headers.replace(HEADER_CSP_RE, (_, a) => a + headerCsp(inlineHashes(html))));
 rmSync(tmp, { recursive: true, force: true });
 console.log(`OK: index.html zaktualizowany (CSS ${css.length} B).`);

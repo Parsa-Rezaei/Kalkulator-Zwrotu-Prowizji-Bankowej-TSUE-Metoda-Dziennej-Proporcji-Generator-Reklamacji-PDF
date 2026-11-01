@@ -5,7 +5,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import { PUBLIC, INDEX, CSP_RE, VENDOR_RE, inlineHashes, buildCsp, vendorSri, loadCalc } from './lib.mjs';
+import { ROOT, PUBLIC, INDEX, HEADERS, CSP_RE, HEADER_CSP_RE, VENDOR_RE, inlineHashes, buildCsp, headerCsp, vendorSri, loadCalc } from './lib.mjs';
 
 const html = readFileSync(INDEX, 'utf8');
 let failed = 0, passed = 0;
@@ -22,6 +22,9 @@ test('CSP w index.html odpowiada aktualnym sumom skryptu i stylu', () => {
   const m = CSP_RE.exec(html);
   assert.ok(m, 'brak meta CSP');
   assert.equal(m[2], buildCsp(inlineHashes(html)), 'nieaktualne sumy CSP – uruchom: npm run build');
+  const hm = HEADER_CSP_RE.exec(readFileSync(HEADERS, 'utf8'));
+  assert.ok(hm, 'brak CSP w _headers');
+  assert.equal(hm[2], headerCsp(inlineHashes(html)), 'nieaktualna CSP w _headers – uruchom: npm run build');
 });
 test('SRI bibliotek w public/vendor jest aktualne', () => {
   const found = [...html.matchAll(VENDOR_RE)];
@@ -35,10 +38,11 @@ test('Brak placeholderów BUILD i niebezpiecznych konstrukcji', () => {
     assert.ok(!script.includes(bad), `niedozwolone: ${bad}`);
   }
   assert.ok(!/\son[a-z]+="/i.test(html.replace(/<script[\s\S]*?<\/script>/g, '')), 'inline event handler w HTML');
-  assert.ok(!/<script[^>]+src=/.test(html), 'zewnętrzny <script src> w HTML (biblioteki ładowane są dynamicznie z SRI)');
+  const srcs = [...html.matchAll(/<script[^>]+src="([^"]*)"/g)].map((x) => x[1]);
+  assert.deepEqual(srcs, ['assets/config.js'], 'w HTML dozwolony jest tylko <script src="assets/config.js"> (biblioteki ładowane są dynamicznie z SRI)');
   const own = ORIGIN.replace(/^https:\/\//, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const ext = new RegExp(`https?:\\/\\/(?!schema\\.org|tailwindcss\\.com\\*\\/|${own}\\/)[a-z0-9.-]+`, 'i');
-  assert.ok(!ext.test(html.replace(/"(buyCoffeeUrl|url)": "[^"]*"/g, '')), 'nieoczekiwany zewnętrzny adres w index.html');
+  assert.ok(!ext.test(html), 'nieoczekiwany zewnętrzny adres w index.html');
 });
 test('Domena jest spójna: canonical, og:url, og:image, JSON-LD, robots.txt, sitemap.xml', () => {
   assert.ok(html.includes(`<meta property="og:url" content="${ORIGIN}/">`), 'og:url');
@@ -49,7 +53,7 @@ test('Domena jest spójna: canonical, og:url, og:image, JSON-LD, robots.txt, sit
 });
 test('Bloki JSON (konfiguracja i JSON-LD) są poprawne', () => {
   const blocks = [...html.matchAll(/<script type="application\/(?:ld\+)?json"[^>]*>([\s\S]*?)<\/script>/g)];
-  assert.equal(blocks.length, 3);
+  assert.equal(blocks.length, 2);
   for (const b of blocks) JSON.parse(b[1]);
 });
 test('FAQ w JSON-LD jest identyczne z widocznym FAQ', () => {
@@ -66,6 +70,17 @@ test('Pliki wdrożeniowe istnieją, nagłówki bezpieczeństwa są ustawione', (
   for (const k of ["frame-ancestors 'none'", 'X-Frame-Options: DENY', 'X-Content-Type-Options: nosniff', 'Strict-Transport-Security', 'Referrer-Policy: no-referrer', 'Permissions-Policy', 'Cross-Origin-Opener-Policy: same-origin']) {
     assert.ok(h.includes(k), `brak w _headers: ${k}`);
   }
+});
+
+test('Płatność: config.js bez kluczy, funkcja weryfikująca z ceną 999 gr', () => {
+  const cfg = readFileSync(path.join(PUBLIC, 'assets', 'config.js'), 'utf8');
+  assert.ok(!/\b(sk|rk|pk)_(live|test)_/.test(cfg), 'klucz Stripe w publicznym config.js');
+  assert.ok(/price: 9\.99,/.test(cfg), 'cena w config.js');
+  assert.ok(/verifyEndpoint: '\/api\/verify'/.test(cfg), 'verifyEndpoint');
+  const fn = readFileSync(path.join(ROOT, 'functions', 'api', 'verify.js'), 'utf8');
+  assert.ok(fn.includes('Number(env.EXPECTED_AMOUNT || 999)'), 'EXPECTED_AMOUNT domyślnie 999');
+  assert.ok(!existsSync(path.join(PUBLIC, 'functions')), 'functions/ nie może być w katalogu publikowanym');
+  for (const bad of ['buyCoffee', 'buycoffee']) assert.ok(!html.includes(bad), `pozostałość: ${bad}`);
 });
 
 // ---------- Obliczenia ----------

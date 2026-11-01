@@ -8,10 +8,13 @@ import vm from 'node:vm';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PUBLIC = path.join(ROOT, 'public');
 export const INDEX = path.join(PUBLIC, 'index.html');
+export const HEADERS = path.join(PUBLIC, '_headers');
 
 export const STYLE_RE = /(<style id="app-css">)([\s\S]*?)(<\/style>)/;
 export const SCRIPT_RE = /(<script id="app-js">)([\s\S]*?)(<\/script>)/;
 export const CSP_RE = /(<meta http-equiv="Content-Security-Policy" content=")([^"]*)(">)/;
+// Linia CSP w bloku /* pliku _headers – ta sama polityka co w <meta> + frame-ancestors (aktualizowana przez build).
+export const HEADER_CSP_RE = /^(  Content-Security-Policy: )(.*)$/m;
 export const VENDOR_RE = /\{ url: '(vendor\/[A-Za-z0-9._-]+)', sri: '([^']*)' \}/g;
 
 export function sha(alg, data) {
@@ -34,6 +37,7 @@ export function buildCsp(h) {
     `script-src 'self' ${h.script}`,
     `style-src ${h.style}`,
     "img-src 'self'",
+    "connect-src 'self'",
     "base-uri 'none'",
     "form-action 'none'",
     "object-src 'none'",
@@ -41,6 +45,10 @@ export function buildCsp(h) {
     'trusted-types kzp',
     "require-trusted-types-for 'script'"
   ].join('; ');
+}
+
+export function headerCsp(h) {
+  return buildCsp(h) + "; frame-ancestors 'none'";
 }
 
 export function vendorSri(file) {
