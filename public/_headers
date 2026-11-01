@@ -1,8 +1,10 @@
 # Nagłówki bezpieczeństwa (Cloudflare Pages / Netlify).
-# Pełna polityka CSP z sumami skryptu i stylu znajduje się w <meta> w index.html.
-# Tutaj dodajemy dyrektywy, których nie da się ustawić w <meta> (frame-ancestors).
+# Ścisła CSP (tylko 'self' + sumy SHA-256 skryptu i stylu z index.html) + frame-ancestors 'none'.
+# Linię Content-Security-Policy aktualizuje automatycznie: npm run build (nie edytuj ręcznie).
+# connect-src 'self' – jedyne połączenie to /api/verify (weryfikacja płatności na tej samej domenie).
+# Przejście do płatności Stripe to zwykła nawigacja (nie wymaga zmian w CSP).
 /*
-  Content-Security-Policy: frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'sha256-ZG0WMGwOF/zz+cXpDJqAUSF9vbskUpPVllRbqta4DrM='; style-src 'sha256-0ASWoKPOVmHYj2ExpDEWRzeEQuR86hrRbzePu7ENtkY='; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; upgrade-insecure-requests; trusted-types kzp; require-trusted-types-for 'script'; frame-ancestors 'none'
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
