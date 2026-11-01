@@ -2,14 +2,15 @@
   "name": "kalkulator-zwrotu-prowizji",
   "version": "1.0.0",
   "private": true,
-  "description": "Kalkulator zwrotu prowizji za wcześniejszą spłatę kredytu (TSUE C-383/18) – metoda dzienna + generator reklamacji PDF",
+  "description": "Kalkulator zwrotu prowizji za wcześniejszą spłatę kredytu (TSUE C-383/18) – metoda dzienna + płatna reklamacja PDF (Stripe, weryfikacja na Cloudflare Pages Functions)",
   "license": "UNLICENSED",
   "type": "module",
   "engines": { "node": ">=18" },
   "scripts": {
     "build": "node scripts/build.mjs && node scripts/check.mjs",
     "check": "node scripts/check.mjs",
-    "test": "node scripts/check.mjs",
+    "test": "node scripts/check.mjs && node --test tests/verify.test.mjs",
+    "test:verify": "node --test tests/verify.test.mjs",
     "e2e": "node tests/e2e.mjs"
   },
   "devDependencies": {
