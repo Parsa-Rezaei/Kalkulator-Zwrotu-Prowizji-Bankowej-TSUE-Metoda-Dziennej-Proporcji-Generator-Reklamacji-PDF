@@ -8,8 +8,8 @@ Plain-language, step-by-step. Do the steps in order. Nothing here requires progr
 
 - A finished website in the `public/` folder. The whole app is `public/index.html`.
 - It runs 100% in the visitor's browser. You store no customer data, so there is no customer database to leak.
-- Built-in money slots: a "support" button (BuyCoffee.to, which accepts BLIK) shown when the PDF is downloaded, and an advertising card for a partner (sankcja kredytu darmowego). Both are switched **off** until you fill in your own links.
-- A safety check (`scripts/check.mjs`) that the hosting runs before every publish. If someone breaks the page or the security settings, the new version does not go live.
+- Built-in money: the calculator is free; the finished PDF complaint costs **9.99 zł** (Stripe Payment Link, BLIK only), confirmed by a small server function (`functions/api/verify.js`) before the PDF is generated. Plus an advertising card for a partner (shows a neutral "Miejsce dla partnera – kontakt" box until you configure one). Sales stay **off** until you set your payment link and Cloudflare secrets.
+- A safety check (`scripts/check.mjs`) and browser tests. Run `npm run build` before committing code changes; the Cloudflare build command stays empty.
 
 ### What I changed from your brief, and why
 
@@ -17,7 +17,7 @@ Plain-language, step-by-step. Do the steps in order. Nothing here requires progr
 2. **Interest rate:** statutory late interest is not a flat 9.25%. It changes with the NBP reference rate. The app uses the full verified history (9.25% since 5 March 2026) and calculates each period separately.
 3. **Mortgages:** art. 39 has no 14-day rule, and refund of a one-off commission is legally disputed (CJEU C-555/21, 9 Feb 2023). The app still calculates it, warns the user, and for mortgages claims interest only from the day after the payment deadline in the letter.
 4. **PKO BP address:** the head office moved on 27 June 2025 to ul. Świętokrzyska 36, 00-116 Warszawa. **Credit Agricole** is at ul. Legnicka 48 bud. C-D, 54-202 Wrocław. **Citi Handlowy's** retail business moved to VeloBank in June 2026, so letters to Citi automatically add "Do wiadomości: VeloBank S.A.".
-5. **No hard paywall (9.99 zł).** On a static site, any paywall written in browser code can be switched off by anyone in about a minute using browser developer tools. A fake paywall also creates legal duties (terms of sale, receipts, consumer withdrawal rules) and refund disputes. So the PDF is free, and the download window asks for **voluntary** support through BuyCoffee.to. BuyCoffee.to handles the payment, so card or BLIK data never touches your site. Section 9 explains the paid option if you want it later.
+5. **Paywall (9.99 zł) checked on the server.** The PDF is unlocked only when `/api/verify` confirms with Stripe that this browser's order was paid (right link, amount 999 gr, PLN, live mode, matching order id). Adding `?platnosc=sukces` to the address or editing browser storage does not unlock it. Honest limit: the PDF is still generated in the browser (to keep personal data private), so a skilled programmer could bypass it with developer tools; for a 9.99 zł product this is acceptable.
 6. **No CDNs.** Tailwind is precompiled into the page and pdfmake is hosted on your own domain with an integrity hash. No third party can inject code into your site, and visitors' IP addresses are not sent to CDN companies.
 
 ---
@@ -26,11 +26,11 @@ Plain-language, step-by-step. Do the steps in order. Nothing here requires progr
 
 Your biggest real risk is someone taking over an account and swapping your links or code, not a bug in the page. Do this once, today:
 
-1. **Email account** (the one you use for GitHub, Cloudflare, the domain registrar and BuyCoffee): turn on 2-step verification, ideally with a passkey or an authenticator app, not SMS. Whoever controls this inbox can reset every other password.
+1. **Email account** (the one you use for GitHub, Cloudflare, the domain registrar and Stripe): turn on 2-step verification, ideally with a passkey or an authenticator app, not SMS. Whoever controls this inbox can reset every other password.
 2. **GitHub:** Settings → Password and authentication → enable **two-factor authentication** and add a **passkey**. Save the recovery codes offline.
 3. **Cloudflare** (after you create the account): My Profile → Authentication → enable 2FA.
 4. **Domain registrar:** enable 2FA and turn on the **transfer lock** (often called "blokada transferu" or "registrar lock").
-5. **BuyCoffee.to:** use a unique, long password from a password manager, and turn on 2FA if the service offers it.
+5. **Stripe:** use a unique, long password from a password manager and turn on 2FA. Never paste a Stripe key into any file in the repository.
 6. Use a **password manager** (for example Bitwarden or 1Password). Never reuse passwords.
 7. Never paste "tracking codes", "chat widgets" or scripts from anyone into `index.html`. The page's security policy blocks them, and they are the most common way sites get compromised.
 8. Never give anyone your GitHub, Cloudflare or registrar login. If someone needs to help, invite them with their own account and remove them afterwards.
@@ -93,9 +93,9 @@ Cloudflare is recommended because it applies the security headers from `public/_
    - **Project name:** `kalkulator-zwrotu-prowizji` (gives you a test address `kalkulator-zwrotu-prowizji.pages.dev`)
    - **Production branch:** `main`
    - **Framework preset:** `None`
-   - **Build command:** `node scripts/check.mjs`
+   - **Build command:** *(leave empty)* – the built page is already in the repository
    - **Build output directory:** `public`
-5. Click **Save and Deploy** and wait about 1 minute. The log should end with `Testy: 20 OK, 0 błędów.`
+5. Click **Save and Deploy** and wait about 1 minute. The `functions/` folder is deployed automatically as `/api/verify`.
 6. Open the `…pages.dev` address and test it: click **Wypełnij przykładem**, add the loan, fill in your details, and download the PDF.
 7. **Connect your domain:** in the project open **Custom domains** → **Set up a custom domain** → type your domain. If the domain is not yet on Cloudflare, Cloudflare tells you to **add the site** (choose the **Free** plan) and shows you **2 nameservers**. Log in to your registrar → the domain's DNS / nameserver ("serwery DNS") settings → replace the existing nameservers with Cloudflare's two → save. This can take from a few minutes up to 24–48 hours. HTTPS is set up automatically.
 8. Optional: add `www.` as a second custom domain too, so both addresses work.
@@ -105,48 +105,49 @@ The `pages.dev` copy is automatically marked `noindex`, so Google indexes only y
 
 > Cloudflare renames menus from time to time. If you don't see "Pages", look for an option to create an application by importing a Git repository with static files. Use the same build command and output folder.
 
-From now on, **every change you commit on GitHub goes live automatically within about a minute**, but only if the safety check passes.
+From now on, **every change you commit on GitHub goes live automatically within about a minute**, so run `npm run build` (which also runs the safety check) before committing code changes.
 
 ---
 
 ## 5. Turn on the money slots
 
-All settings live in one block in `public/index.html`. On GitHub open the file → ✏️ → press Ctrl+F and search for `app-config`:
+All settings live in **`public/assets/config.js`** (no rebuild needed). On GitHub open the file → ✏️:
 
-```json
-{
-  "buyCoffeeUrl": "",
-  "supportCta": "Postaw kawę – BLIK / karta",
-  "partner": { "enabled": false, "label": "Reklama", "title": "…", "text": "…", "cta": "…", "url": "" },
-  "owner": { "name": "", "email": "" },
-  "ratesVerified": "",
-  "extraRates": []
-}
+```js
+price: 9.99,
+paymentUrl: '',               // your Stripe Payment Link, e.g. 'https://buy.stripe.com/…'
+verifyEndpoint: '/api/verify',
+seller: { name: '…', address: '…', email: '…', nip: '' },
+partner: { enabled: false, label: 'Reklama', title: '', text: '', cta: 'Sprawdź', url: '' },
+ratesVerified: '',
+extraRates: []
 ```
 
-Rules: keep the quotes and commas exactly as they are. Links must start with `https://`; anything else is ignored on purpose. If you break the JSON (for example a missing quote), the safety check stops the publish, so the live site is never broken.
+Rules: keep the quotes and commas exactly as they are. Links must start with `https://`; anything else is ignored on purpose. **Never put a Stripe key in this file** – it is public.
 
-### 5a. Voluntary support – BuyCoffee.to (BLIK, cards, transfers)
+### 5a. Paid PDF – Stripe Payment Link (BLIK)
 
-1. Create a profile at **buycoffee.to** and fill in the payout details (your bank account). Read their current fee table first; they take a commission on each payment.
-2. Copy your profile link, for example `https://buycoffee.to/kalkulatorprowizji`.
-3. Paste it into `"buyCoffeeUrl": "https://buycoffee.to/kalkulatorprowizji"` → **Commit changes**.
-4. After about a minute, the download window shows the yellow **"Postaw kawę – BLIK / karta"** button.
+1. Stripe → **Developers → API keys → Create restricted key**: permission **Checkout Sessions: Read** only. Copy the `rk_live_…` key.
+2. Stripe → **Payment Links → New**: product "Reklamacja PDF – zwrot prowizji", price **9.99 PLN**, payment methods **BLIK only**. After payment → **Don't show confirmation page → redirect** to `https://YOUR-DOMAIN/?platnosc=sukces&session_id={CHECKOUT_SESSION_ID}`. Copy the link id `plink_…` and the link URL `https://buy.stripe.com/…`.
+3. Cloudflare → your Pages project → **Settings → Variables and Secrets** → add as **Secret** (Production): `STRIPE_SECRET_KEY` = `rk_live_…`, `PAYMENT_LINK_ID` = `plink_…`, `EXPECTED_AMOUNT` = `999`. Redeploy.
+4. Open `https://YOUR-DOMAIN/api/verify?ping=1` – it must show `{"ready":true}`. Until then the site says "Sprzedaż chwilowo niedostępna – nie pobraliśmy żadnych środków" and nobody is sent to pay.
+5. Put the link URL into `paymentUrl` and your details into `seller` → **Commit changes**.
+6. Test once with a real BLIK payment, then refund it in Stripe. (For a dry run: Stripe test mode + `ALLOW_TEST_MODE=true`, removed afterwards.)
 
 ### 5b. Partner advert – SKD / law-firm leads (usually your biggest income)
 
 1. Find companies that handle **sankcja kredytu darmowego (SKD)** and Lexitor claims and that run an **affiliate or partner programme** (they pay per lead or per signed client). Search for terms like "program partnerski SKD" or "współpraca afiliacyjna sankcja kredytu darmowego", and contact them directly.
 2. Agree in writing on: the commission, how leads are counted, when payment is made, and that they comply with GDPR when handling the people you send.
 3. Note: Polish **advocates and legal advisers** have professional ethics rules that can restrict paying for client referrals. Many SKD firms are ordinary companies that buy claims, not law offices. Ask the partner how they are allowed to pay you.
-4. They give you a tracking link. Fill in the partner block: `"enabled": true`, your own `title`, `text` and `cta` if you want, and `"url": "https://…their link…"`.
-5. Keep `"label": "Reklama"`. Hidden advertising is an unfair market practice under Polish law, and the label protects you. The link automatically gets `rel="sponsored"` for Google.
+4. They give you a tracking link. Fill in the partner block in `config.js`: `enabled: true`, your own `title`, `text` and `cta`, and `url: 'https://…their link…'`.
+5. Keep `label: 'Reklama'`. Hidden advertising is an unfair market practice under Polish law, and the label protects you. The link automatically gets `rel="sponsored"` for Google.
 
 ### 5c. Your legal details (required)
 
 The Polish law on electronic services (ustawa o świadczeniu usług drogą elektroniczną) requires a service provider to publish identifying details and terms of service. The page already contains the terms (Regulamin). Fill in:
 
-```json
-"owner": { "name": "Jan Kowalski, ul. Przykładowa 1, 00-001 Warszawa", "email": "kontakt@twojadomena.pl" }
+```js
+seller: { name: 'Jan Kowalski', address: 'ul. Przykładowa 1, 00-001 Warszawa', email: 'kontakt@twojadomena.pl', nip: '' }
 ```
 
 Use a dedicated email address, for example a free mailbox or one created through your registrar, not your private address.
@@ -170,10 +171,10 @@ Use a dedicated email address, for example a free mailbox or one created through
 ## 7. Keep it correct (about 15 minutes a month)
 
 1. **Interest rates:** after each NBP Monetary Policy Council (RPP) meeting, check whether the **reference rate** changed (nbp.pl). If it did, add a line to `extraRates`, where the percentage = new reference rate + 5.5:
-   ```json
-   "extraRates": [ { "od": "YYYY-MM-DD", "procent": 9.00 } ]
+   ```js
+   extraRates: [ { od: 'YYYY-MM-DD', procent: 9.00 } ]
    ```
-   `od` is the date the new rate takes effect. Also set `"ratesVerified": "YYYY-MM-DD"` to the date you checked. Then update the sentence "Od 5 marca 2026 r. wynoszą one 9,25%" in the FAQ, in **both** places in `index.html` (the visible FAQ and the JSON-LD). The safety check verifies that the two copies match.
+   `od` is the date the new rate takes effect. Also set `ratesVerified: 'YYYY-MM-DD'` (in `config.js`) to the date you checked. Then update the sentence "Od 5 marca 2026 r. wynoszą one 9,25%" in the FAQ, in **both** places in `index.html` (the visible FAQ and the JSON-LD). The safety check verifies that the two copies match.
 2. **Bank addresses:** a few times a year, check the head-office addresses on the banks' websites or in the KRS register. To change an address in the built-in list, ask a developer (see step 8), because the list sits inside the protected script.
 3. **Law changes:** Poland must implement the new EU consumer credit directive (CCD2, applicable from 20 Nov 2026). As of my research, the new Polish act **had not been passed**. When it passes, have the legal texts reviewed. Contracts signed before it generally stay under the 2011 act.
 
@@ -185,30 +186,26 @@ The main script and the styles are protected by hashes. If you change anything i
 
 ```bash
 npm install
-npm run build     # recompiles CSS, refreshes hashes, runs 20 tests
-npm run e2e       # optional: real-browser test that downloads and reads the PDF
+npm run build     # recompiles CSS, refreshes hashes (index.html + _headers), runs the checks
+npm test          # checks + tests of functions/api/verify.js
+npm run e2e       # real-browser test: calculator, PDF text, paywall with a mocked /api/verify
 ```
 
 and commits the result.
 
 ---
 
-## 9. If you later want a real paid download (9.99 zł)
+## 9. Selling the PDF – legal basics
 
-Only consider this once traffic justifies it:
-
-1. Register a business, or stay within the unregistered-activity limit (see step 10), and add terms of sale and receipts.
-2. Use a payment provider with BLIK (for example Stripe, Przelewy24 or PayU) together with a small server function that confirms the payment.
-3. Be aware: as long as the PDF is generated in the browser, a technical user can bypass the paywall. The only robust paywall generates the PDF on a server, which means the user's data leaves their browser. That breaks the "privacy-first" promise and makes you a personal-data controller under GDPR, with extra obligations.
-4. For digital content, the buyer must give explicit consent to delivery before the withdrawal period ends and acknowledge losing the withdrawal right.
-
-The donation + partner model avoids all of this and is the safer choice.
+- The page includes a Regulamin and a Polityka prywatności (Polish templates using your `seller` details). Have them checked before you start selling.
+- Before paying, the buyer must tick two boxes: acceptance of the Regulamin, and the request for immediate delivery of digital content with acknowledgement of losing the 14-day withdrawal right (art. 38 ust. 1 pkt 13 of the Consumer Rights Act).
+- Issue receipts/invoices as your tax status requires (Stripe can e-mail receipts).
 
 ---
 
 ## 10. Taxes and legal basics (Poland)
 
-- Money from BuyCoffee and affiliate commissions is **income**.
+- Money from PDF sales and affiliate commissions is **income**.
 - **Unregistered activity (działalność nierejestrowana)** in 2026: allowed if your revenue in **any quarter does not exceed 225% of the minimum wage = 10,813.50 zł** (minimum wage in 2026: 4,806 zł), and you have not run a registered business in the last 60 months. Above that, you must register a business (CEIDG) within 7 days.
 - Declare the income in your annual PIT return. Ask an accountant (księgowa/księgowy) once at the start; it is cheap insurance.
 - The site already states it is **not legal advice**. Keep that text.
@@ -217,13 +214,13 @@ The donation + partner model avoids all of this and is the safer choice.
 
 ## 11. Quick checklist
 
-- [ ] 2FA on email, GitHub, Cloudflare, registrar, BuyCoffee
+- [ ] 2FA on email, GitHub, Cloudflare, registrar, Stripe
 - [ ] Repository renamed, description and topics set, made private, default branch `main`
 - [ ] Domain bought, transfer lock on; domain replaced in 3 files if it differs
-- [ ] Cloudflare Pages: build command `node scripts/check.mjs`, output folder `public`
+- [ ] Cloudflare Pages: build command empty, output folder `public`; secrets `STRIPE_SECRET_KEY`, `PAYMENT_LINK_ID`, `EXPECTED_AMOUNT=999`
 - [ ] Custom domain connected, HTTPS works, securityheaders.com shows a top grade
-- [ ] `buyCoffeeUrl` set and tested
-- [ ] `owner` name and email filled in
+- [ ] `/api/verify?ping=1` returns `{"ready":true}`; `paymentUrl` set; one real BLIK purchase tested and refunded
+- [ ] `seller` name, address and email filled in
 - [ ] Partner link added (when you have a signed agreement)
 - [ ] Google Search Console verified, sitemap submitted
 - [ ] Monthly: NBP rate check → `extraRates` + `ratesVerified` + FAQ sentence
